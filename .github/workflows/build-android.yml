@@ -1,4 +1,4 @@
-name: Build Android APK and AAB
+name: Build Android APK, AAB and CafeBazaar BIN
 
 on:
   push:
@@ -12,7 +12,7 @@ env:
 
 jobs:
   build:
-    name: Build Android Release AAB & Debug APK
+    name: Build Android Release AAB, Debug APK & CafeBazaar BIN
     runs-on: ubuntu-latest
 
     env:
@@ -190,6 +190,81 @@ jobs:
 
           echo "SUCCESS: AAB is signed with the CreatorFlow release certificate."
 
+      - name: Download CafeBazaar Bundle Signer 0.1.12
+        run: |
+          curl -fL \
+            -o "$RUNNER_TEMP/bundlesigner-0.1.12.jar" \
+            https://github.com/cafebazaar/bundle-signer/releases/download/v0.1.12/bundlesigner-0.1.12.jar
+
+          if [ ! -s "$RUNNER_TEMP/bundlesigner-0.1.12.jar" ]; then
+            echo "ERROR: Bundle Signer download failed."
+            exit 1
+          fi
+
+          echo "CafeBazaar Bundle Signer downloaded successfully."
+          ls -lh "$RUNNER_TEMP/bundlesigner-0.1.12.jar"
+
+      - name: Generate CafeBazaar BIN
+        run: |
+          AAB_PATH="android/app/build/outputs/bundle/release/app-release.aab"
+          BIN_DIR="$RUNNER_TEMP/cafebazaar-bin"
+
+          rm -rf "$BIN_DIR"
+          mkdir -p "$BIN_DIR"
+
+          if [ ! -f "$AAB_PATH" ]; then
+            echo "ERROR: Release AAB not found."
+            exit 1
+          fi
+
+          echo "Generating CafeBazaar BIN from the signed CreatorFlow AAB..."
+
+          java -Xmx4g \
+            -jar "$RUNNER_TEMP/bundlesigner-0.1.12.jar" \
+            genbin \
+            -v \
+            --bundle "$AAB_PATH" \
+            --bin "$BIN_DIR" \
+            --v2-signing-enabled true \
+            --v3-signing-enabled false \
+            --ks "$CREATORFLOW_KEYSTORE_FILE" \
+            --ks-key-alias "$CREATORFLOW_KEY_ALIAS" \
+            --ks-pass "env:CREATORFLOW_KEYSTORE_PASSWORD" \
+            --key-pass "env:CREATORFLOW_KEY_PASSWORD"
+
+          echo "Bundle Signer finished."
+
+          echo "Generated BIN files:"
+          find "$BIN_DIR" -maxdepth 2 -type f -print -exec ls -lh {} \;
+
+          BIN_COUNT="$(find "$BIN_DIR" -type f -name "*.bin" | wc -l)"
+
+          if [ "$BIN_COUNT" -lt 1 ]; then
+            echo "ERROR: No .bin file was generated."
+            exit 1
+          fi
+
+          echo "SUCCESS: CafeBazaar BIN generated."
+
+      - name: Prepare CafeBazaar Release Package
+        run: |
+          PACKAGE_DIR="$RUNNER_TEMP/cafebazaar-package"
+
+          rm -rf "$PACKAGE_DIR"
+          mkdir -p "$PACKAGE_DIR"
+
+          cp \
+            android/app/build/outputs/bundle/release/app-release.aab \
+            "$PACKAGE_DIR/CreatorFlow-release.aab"
+
+          find "$RUNNER_TEMP/cafebazaar-bin" \
+            -type f \
+            -name "*.bin" \
+            -exec cp {} "$PACKAGE_DIR/" \;
+
+          echo "Final CafeBazaar package:"
+          ls -lh "$PACKAGE_DIR"
+
       - name: Upload Debug APK
         if: always()
         uses: actions/upload-artifact@v4
@@ -204,4 +279,12 @@ jobs:
         with:
           name: creatorflow-ai-release-aab
           path: android/app/build/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+      - name: Upload CafeBazaar AAB and BIN
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: creatorflow-ai-cafebazaar-release
+          path: ${{ runner.temp }}/cafebazaar-package/*
           if-no-files-found: error
