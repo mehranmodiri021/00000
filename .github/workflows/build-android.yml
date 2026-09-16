@@ -15,6 +15,11 @@ jobs:
     name: Build Android Release AAB & Debug APK
     runs-on: ubuntu-latest
 
+    env:
+      CREATORFLOW_KEYSTORE_PASSWORD: ${{ secrets.CREATORFLOW_KEYSTORE_PASSWORD }}
+      CREATORFLOW_KEY_ALIAS: ${{ secrets.CREATORFLOW_KEY_ALIAS }}
+      CREATORFLOW_KEY_PASSWORD: ${{ secrets.CREATORFLOW_KEY_PASSWORD }}
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -28,9 +33,12 @@ jobs:
         run: |
           npm install
           npm run build
+
           mkdir -p android/app/src/main/assets
           rm -rf android/app/src/main/assets/*
+
           cp -r dist/* android/app/src/main/assets/
+
           mkdir -p android/app/src/main/assets/dist
           cp -r dist/* android/app/src/main/assets/dist/
 
@@ -46,17 +54,25 @@ jobs:
       - name: Accept Android SDK Licenses
         run: |
           mkdir -p "$ANDROID_HOME/licenses"
-          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > "$ANDROID_HOME/licenses/android-sdk-license"
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$ANDROID_HOME/licenses/android-sdk-preview-license"
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$ANDROID_HOME/licenses/android-sdk-license"
+
+          echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" \
+            > "$ANDROID_HOME/licenses/android-sdk-license"
+
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" \
+            > "$ANDROID_HOME/licenses/android-sdk-preview-license"
+
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" \
+            >> "$ANDROID_HOME/licenses/android-sdk-license"
 
       - name: Prepare Gradle Wrapper
         run: |
           cd android
+
           mkdir -p gradle/wrapper
 
           if [ ! -f "gradle/wrapper/gradle-wrapper.jar" ]; then
             echo "Downloading official gradle-wrapper.jar..."
+
             curl -fsSL \
               -o gradle/wrapper/gradle-wrapper.jar \
               https://raw.githubusercontent.com/gradle/gradle/v8.10.2/gradle/wrapper/gradle-wrapper.jar
@@ -75,7 +91,8 @@ jobs:
 
           KEYSTORE_FILE="$RUNNER_TEMP/creatorflow-release.keystore"
 
-          printf '%s' "$CREATORFLOW_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_FILE"
+          printf '%s' "$CREATORFLOW_KEYSTORE_BASE64" \
+            | base64 --decode > "$KEYSTORE_FILE"
 
           if [ ! -s "$KEYSTORE_FILE" ]; then
             echo "ERROR: Release keystore was not created."
@@ -86,36 +103,34 @@ jobs:
 
           echo "CREATORFLOW_KEYSTORE_FILE=$KEYSTORE_FILE" >> "$GITHUB_ENV"
 
+          echo "CreatorFlow release keystore prepared successfully."
+
       - name: Validate CreatorFlow Release Signing Configuration
-        env:
-          CREATORFLOW_KEYSTORE_PASSWORD: ${{ secrets.CREATORFLOW_KEYSTORE_PASSWORD }}
-          CREATORFLOW_KEY_ALIAS: ${{ secrets.CREATORFLOW_KEY_ALIAS }}
-          CREATORFLOW_KEY_PASSWORD: ${{ secrets.CREATORFLOW_KEY_PASSWORD }}
         run: |
-          test -n "$CREATORFLOW_KEYSTORE_FILE" || {
+          if [ -z "$CREATORFLOW_KEYSTORE_FILE" ]; then
             echo "ERROR: CREATORFLOW_KEYSTORE_FILE is missing."
             exit 1
-          }
+          fi
 
-          test -f "$CREATORFLOW_KEYSTORE_FILE" || {
+          if [ ! -f "$CREATORFLOW_KEYSTORE_FILE" ]; then
             echo "ERROR: CreatorFlow release keystore file does not exist."
             exit 1
-          }
+          fi
 
-          test -n "$CREATORFLOW_KEYSTORE_PASSWORD" || {
+          if [ -z "$CREATORFLOW_KEYSTORE_PASSWORD" ]; then
             echo "ERROR: CREATORFLOW_KEYSTORE_PASSWORD secret is missing."
             exit 1
-          }
+          fi
 
-          test -n "$CREATORFLOW_KEY_ALIAS" || {
+          if [ -z "$CREATORFLOW_KEY_ALIAS" ]; then
             echo "ERROR: CREATORFLOW_KEY_ALIAS secret is missing."
             exit 1
-          }
+          fi
 
-          test -n "$CREATORFLOW_KEY_PASSWORD" || {
+          if [ -z "$CREATORFLOW_KEY_PASSWORD" ]; then
             echo "ERROR: CREATORFLOW_KEY_PASSWORD secret is missing."
             exit 1
-          }
+          fi
 
           keytool -list \
             -keystore "$CREATORFLOW_KEYSTORE_FILE" \
@@ -131,18 +146,11 @@ jobs:
           ./gradlew assembleDebug --stacktrace --no-daemon
 
       - name: Build Android Release AAB
-        env:
-          CREATORFLOW_KEYSTORE_PASSWORD: ${{ secrets.CREATORFLOW_KEYSTORE_PASSWORD }}
-          CREATORFLOW_KEY_ALIAS: ${{ secrets.CREATORFLOW_KEY_ALIAS }}
-          CREATORFLOW_KEY_PASSWORD: ${{ secrets.CREATORFLOW_KEY_PASSWORD }}
         run: |
           cd android
           ./gradlew bundleRelease --stacktrace --no-daemon
 
       - name: Verify Release AAB Signature
-        env:
-          CREATORFLOW_KEYSTORE_PASSWORD: ${{ secrets.CREATORFLOW_KEYSTORE_PASSWORD }}
-          CREATORFLOW_KEY_ALIAS: ${{ secrets.CREATORFLOW_KEY_ALIAS }}
         run: |
           AAB_PATH="android/app/build/outputs/bundle/release/app-release.aab"
 
