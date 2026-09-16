@@ -21,24 +21,69 @@ android {
         }
     }
 
+    val creatorFlowKeystoreFile = System.getenv("CREATORFLOW_KEYSTORE_FILE")
+    val creatorFlowKeystorePassword = System.getenv("CREATORFLOW_KEYSTORE_PASSWORD")
+    val creatorFlowKeyAlias = System.getenv("CREATORFLOW_KEY_ALIAS")
+    val creatorFlowKeyPassword = System.getenv("CREATORFLOW_KEY_PASSWORD")
+
+    signingConfigs {
+        create("creatorFlowRelease") {
+            if (
+                !creatorFlowKeystoreFile.isNullOrBlank() &&
+                !creatorFlowKeystorePassword.isNullOrBlank() &&
+                !creatorFlowKeyAlias.isNullOrBlank() &&
+                !creatorFlowKeyPassword.isNullOrBlank()
+            ) {
+                storeFile = file(creatorFlowKeystoreFile)
+                storePassword = creatorFlowKeystorePassword
+                keyAlias = creatorFlowKeyAlias
+                keyPassword = creatorFlowKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
             isShrinkResources = false
-            signingConfig = signingConfigs.getByName("debug")
+
+            if (
+                creatorFlowKeystoreFile.isNullOrBlank() ||
+                creatorFlowKeystorePassword.isNullOrBlank() ||
+                creatorFlowKeyAlias.isNullOrBlank() ||
+                creatorFlowKeyPassword.isNullOrBlank()
+            ) {
+                throw GradleException(
+                    "CreatorFlow release signing configuration is missing. " +
+                    "Set CREATORFLOW_KEYSTORE_FILE, CREATORFLOW_KEYSTORE_PASSWORD, " +
+                    "CREATORFLOW_KEY_ALIAS and CREATORFLOW_KEY_PASSWORD."
+                )
+            }
+
+            if (!file(creatorFlowKeystoreFile).exists()) {
+                throw GradleException(
+                    "CreatorFlow release keystore not found: $creatorFlowKeystoreFile"
+                )
+            }
+
+            signingConfig = signingConfigs.getByName("creatorFlowRelease")
         }
+
         debug {
             applicationIdSuffix = ".debug"
             isDebuggable = true
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = "17"
     }
+
     buildFeatures {
         compose = true
         buildConfig = true
