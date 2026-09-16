@@ -16,7 +16,6 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      CREATORFLOW_KEYSTORE_FILE: ${{ runner.temp }}/creatorflow-release.keystore
       CREATORFLOW_KEYSTORE_PASSWORD: ${{ secrets.CREATORFLOW_KEYSTORE_PASSWORD }}
       CREATORFLOW_KEY_ALIAS: ${{ secrets.CREATORFLOW_KEY_ALIAS }}
       CREATORFLOW_KEY_PASSWORD: ${{ secrets.CREATORFLOW_KEY_PASSWORD }}
@@ -90,15 +89,19 @@ jobs:
             exit 1
           fi
 
-          printf '%s' "$CREATORFLOW_KEYSTORE_BASE64" \
-            | base64 --decode > "$CREATORFLOW_KEYSTORE_FILE"
+          KEYSTORE_FILE="$RUNNER_TEMP/creatorflow-release.keystore"
 
-          if [ ! -s "$CREATORFLOW_KEYSTORE_FILE" ]; then
+          printf '%s' "$CREATORFLOW_KEYSTORE_BASE64" \
+            | base64 --decode > "$KEYSTORE_FILE"
+
+          if [ ! -s "$KEYSTORE_FILE" ]; then
             echo "ERROR: Release keystore was not created."
             exit 1
           fi
 
-          chmod 600 "$CREATORFLOW_KEYSTORE_FILE"
+          chmod 600 "$KEYSTORE_FILE"
+
+          echo "CREATORFLOW_KEYSTORE_FILE=$KEYSTORE_FILE" >> "$GITHUB_ENV"
 
           echo "CreatorFlow release keystore prepared successfully."
 
